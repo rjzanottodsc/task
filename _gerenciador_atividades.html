@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Atividades Diárias</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Fundo escuro */
+            color: #e5e7eb; /* Texto claro */
+        }
+        /* Estilização da barra de rolagem */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+        .activity-block {
+            position: absolute;
+            height: 100%;
+            background-color: #3b82f6; /* Azul para atividades */
+            border-radius: 4px;
+            opacity: 0.8;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            overflow: hidden;
+            color: white;
+            font-size: 10px;
+            padding-left: 4px;
+            box-sizing: border-box;
+            border: 1px solid #1e40af;
+        }
+        .activity-block:hover {
+            opacity: 1;
+            transform: scaleY(1.1);
+            z-index: 10;
+        }
+        /* Esconde a interface principal até o usuário ser definido */
+        #main-content {
+            display: none;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+
+        <!-- Seção de Login / Usuário -->
+        <section id="user-section" class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+             <div id="login-view">
+                <h2 class="text-xl font-semibold text-white mb-4">Bem-vindo(a)!</h2>
+                <p class="text-gray-400 mb-4">Por favor, insira seu nome para começar a gerenciar suas atividades.</p>
+                <form id="user-form" class="flex items-center gap-4">
+                    <input type="text" id="username-input" placeholder="Seu nome" required class="flex-grow bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-white p-2">
+                    <button type="submit" class="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition duration-300">Acessar</button>
+                </form>
+            </div>
+            <div id="welcome-view" class="hidden">
+                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                    <div>
+                        <h1 class="text-2xl md:text-3xl font-bold text-white">Gestor de Rotinas</h1>
+                        <p class="text-gray-400 mt-1">Usuário: <span id="current-user-span" class="font-semibold text-blue-300"></span></p>
+                    </div>
+                    <div class="flex items-center gap-4 mt-4 sm:mt-0">
+                        <input type="date" id="date-picker" class="bg-gray-700 border-gray-600 rounded-md shadow-sm text-white p-2">
+                        <button id="logout-btn" class="py-2 px-4 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg shadow-md transition duration-300">Trocar Usuário</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Conteúdo Principal (Inicialmente Oculto) -->
+        <main id="main-content" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Coluna de Formulário e Gráfico -->
+            <div class="flex flex-col gap-8">
+                <section id="form-section" class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Adicionar/Editar Atividade</h2>
+                    <form id="activity-form" class="space-y-4">
+                        <input type="hidden" id="activity-id">
+                        <div>
+                            <label for="description" class="block text-sm font-medium text-gray-300">Descrição</label>
+                            <input type="text" id="description" name="description" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-white p-2">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="start-time" class="block text-sm font-medium text-gray-300">Início</label>
+                                <input type="time" id="start-time" name="start-time" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-white p-2">
+                            </div>
+                            <div>
+                                <label for="end-time" class="block text-sm font-medium text-gray-300">Término</label>
+                                <input type="time" id="end-time" name="end-time" required class="mt-1 block w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-white p-2">
+                            </div>
+                        </div>
+                        <div class="flex justify-end space-x-3 pt-2">
+                            <button type="button" id="cancel-edit-btn" class="hidden py-2 px-4 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg shadow-md transition duration-300">Cancelar</button>
+                            <button type="submit" class="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition duration-300">Salvar Atividade</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section id="chart-section" class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Linha do Tempo do Dia</h2>
+                    <div id="summary" class="flex justify-around mb-4 text-center text-sm md:text-base">
+                        <div>
+                            <span class="block font-bold text-green-400" id="active-time">0h 0m</span>
+                            <span class="text-gray-400">Tempo Ativo</span>
+                        </div>
+                        <div>
+                            <span class="block font-bold text-yellow-400" id="idle-time">24h 0m</span>
+                            <span class="text-gray-400">Tempo Ocioso</span>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-10 bg-gray-700 rounded-lg overflow-hidden" id="timeline-container"></div>
+                    <div class="flex justify-between text-xs text-gray-400 mt-2">
+                        <span>00:00</span><span>03:00</span><span>06:00</span><span>09:00</span><span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span><span>24:00</span>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Coluna da Lista de Atividades -->
+            <div class="flex flex-col gap-8">
+                <section id="list-section" class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Atividades do Dia</h2>
+                    <div id="activities-list" class="space-y-3 max-h-[30rem] lg:max-h-full overflow-y-auto pr-2"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Elementos da UI
+            const userForm = document.getElementById('user-form');
+            const usernameInput = document.getElementById('username-input');
+            const loginView = document.getElementById('login-view');
+            const welcomeView = document.getElementById('welcome-view');
+            const currentUserSpan = document.getElementById('current-user-span');
+            const logoutBtn = document.getElementById('logout-btn');
+            const mainContent = document.getElementById('main-content');
+            const datePicker = document.getElementById('date-picker');
+            
+            const form = document.getElementById('activity-form');
+            const activityIdInput = document.getElementById('activity-id');
+            const descriptionInput = document.getElementById('description');
+            const startTimeInput = document.getElementById('start-time');
+            const endTimeInput = document.getElementById('end-time');
+            const cancelEditBtn = document.getElementById('cancel-edit-btn');
+            const activitiesList = document.getElementById('activities-list');
+            const timelineContainer = document.getElementById('timeline-container');
+            const activeTimeEl = document.getElementById('active-time');
+            const idleTimeEl = document.getElementById('idle-time');
+
+            // Estado da aplicação
+            let appData = JSON.parse(localStorage.getItem('appData')) || { users: {}, currentUser: null };
+            let selectedDate = new Date().toISOString().split('T')[0];
+
+            // --- FUNÇÕES DE LÓGICA ---
+            const save = () => {
+                localStorage.setItem('appData', JSON.stringify(appData));
+            };
+            
+            const timeToMinutes = (time) => {
+                const [hours, minutes] = time.split(':').map(Number);
+                return hours * 60 + minutes;
+            };
+
+            const minutesToHoursMinutes = (totalMinutes) => {
+                if (totalMinutes < 0) totalMinutes = 0;
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                return `${hours}h ${minutes}m`;
+            };
+
+            const render = () => {
+                if (!appData.currentUser) return; // Não renderiza se não houver usuário
+
+                // Garante que a estrutura de dados exista para o usuário e data
+                if (!appData.users[appData.currentUser]) {
+                    appData.users[appData.currentUser] = {};
+                }
+                if (!appData.users[appData.currentUser][selectedDate]) {
+                    appData.users[appData.currentUser][selectedDate] = [];
+                }
+
+                const activities = appData.users[appData.currentUser][selectedDate];
+                activities.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+
+                activitiesList.innerHTML = '';
+                timelineContainer.innerHTML = '';
+
+                if (activities.length === 0) {
+                    activitiesList.innerHTML = '<p class="text-gray-500 text-center py-4">Nenhuma atividade para este dia.</p>';
+                }
+
+                let totalActiveMinutes = 0;
+                activities.forEach(activity => {
+                    const activityElement = document.createElement('div');
+                    activityElement.className = 'bg-gray-700 p-3 rounded-lg flex justify-between items-center transition hover:bg-gray-600';
+                    activityElement.innerHTML = `
+                        <div>
+                            <p class="font-medium text-white">${activity.description}</p>
+                            <p class="text-sm text-gray-400">${activity.startTime} - ${activity.endTime}</p>
+                        </div>
+                        <div class="space-x-2">
+                            <button data-id="${activity.id}" class="edit-btn p-2 text-gray-400 hover:text-blue-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
+                            </button>
+                            <button data-id="${activity.id}" class="delete-btn p-2 text-gray-400 hover:text-red-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
+                            </button>
+                        </div>`;
+                    activitiesList.appendChild(activityElement);
+
+                    const startMinutes = timeToMinutes(activity.startTime);
+                    const endMinutes = timeToMinutes(activity.endTime);
+                    const duration = endMinutes > startMinutes ? endMinutes - startMinutes : 0;
+                    totalActiveMinutes += duration;
+
+                    const block = document.createElement('div');
+                    block.className = 'activity-block';
+                    block.style.left = `${(startMinutes / 1440) * 100}%`;
+                    block.style.width = `${(duration / 1440) * 100}%`;
+                    block.title = `${activity.description} (${activity.startTime} - ${activity.endTime})`;
+                    block.textContent = activity.description;
+                    timelineContainer.appendChild(block);
+                });
+
+                const totalIdleMinutes = 1440 - totalActiveMinutes;
+                activeTimeEl.textContent = minutesToHoursMinutes(totalActiveMinutes);
+                idleTimeEl.textContent = minutesToHoursMinutes(totalIdleMinutes);
+
+                save();
+            };
+
+            const resetForm = () => {
+                form.reset();
+                activityIdInput.value = '';
+                cancelEditBtn.classList.add('hidden');
+            };
+
+            const showMainApp = () => {
+                loginView.classList.add('hidden');
+                welcomeView.classList.remove('hidden');
+                mainContent.style.display = 'grid';
+                currentUserSpan.textContent = appData.currentUser;
+                datePicker.value = selectedDate;
+                render();
+            };
+            
+            const showLogin = () => {
+                appData.currentUser = null;
+                save();
+                loginView.classList.remove('hidden');
+                welcomeView.classList.add('hidden');
+                mainContent.style.display = 'none';
+                usernameInput.value = '';
+            };
+            
+            // --- EVENT LISTENERS ---
+            userForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const username = usernameInput.value.trim();
+                if (username) {
+                    appData.currentUser = username;
+                    save();
+                    showMainApp();
+                }
+            });
+
+            logoutBtn.addEventListener('click', showLogin);
+
+            datePicker.addEventListener('change', (e) => {
+                selectedDate = e.target.value;
+                resetForm();
+                render();
+            });
+
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const activities = appData.users[appData.currentUser][selectedDate];
+                const id = activityIdInput.value;
+                const description = descriptionInput.value.trim();
+                const startTime = startTimeInput.value;
+                const endTime = endTimeInput.value;
+
+                if (!description || !startTime || !endTime || timeToMinutes(startTime) >= timeToMinutes(endTime)) {
+                    alert('Por favor, preencha todos os campos corretamente. A hora de término deve ser após a de início.');
+                    return;
+                }
+
+                if (id) {
+                    const activity = activities.find(a => a.id === id);
+                    Object.assign(activity, { description, startTime, endTime });
+                } else {
+                    activities.push({ id: Date.now().toString(), description, startTime, endTime });
+                }
+
+                resetForm();
+                render();
+            });
+            
+            activitiesList.addEventListener('click', (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
+                
+                const activities = appData.users[appData.currentUser][selectedDate];
+                const id = target.dataset.id;
+                
+                if (target.classList.contains('edit-btn')) {
+                    const activity = activities.find(a => a.id === id);
+                    activityIdInput.value = activity.id;
+                    descriptionInput.value = activity.description;
+                    startTimeInput.value = activity.startTime;
+                    endTimeInput.value = activity.endTime;
+                    cancelEditBtn.classList.remove('hidden');
+                    form.scrollIntoView({ behavior: 'smooth' });
+                }
+
+                if (target.classList.contains('delete-btn')) {
+                    if (confirm('Tem certeza que deseja remover esta atividade?')) {
+                        appData.users[appData.currentUser][selectedDate] = activities.filter(a => a.id !== id);
+                        render();
+                    }
+                }
+            });
+
+            cancelEditBtn.addEventListener('click', resetForm);
+
+            // --- INICIALIZAÇÃO ---
+            if (appData.currentUser) {
+                showMainApp();
+            } else {
+                showLogin();
+            }
+        });
+    </script>
+</body>
+</html>
+
