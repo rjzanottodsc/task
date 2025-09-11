@@ -61,7 +61,7 @@
         <form id="email-login-form" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <input type="email" id="email-input" placeholder="seuemail@dominio.com" required
                  class="flex-grow bg-gray-700 border-gray-600 rounded-md text-white p-2" />
-          <button class="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg">
+          <button type="submit" class="py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg">
             Enviar código
           </button>
         </form>
@@ -74,6 +74,10 @@
           <button id="google-btn" class="py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg">
             Entrar com Google
           </button>
+        </div>
+
+        <div id="error-message" class="mt-4 p-3 bg-red-600 text-white rounded-lg hidden">
+          <p id="error-text"></p>
         </div>
       </div>
 
@@ -173,7 +177,9 @@
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('DOM carregado, iniciando aplicação...');
+      
       // ======= UI elements =======
       const loginView = document.getElementById('login-view');
       const welcomeView = document.getElementById('welcome-view');
@@ -197,6 +203,8 @@
       const emailInput = document.getElementById('email-input');
       const otpInfo = document.getElementById('otp-info');
       const googleBtn = document.getElementById('google-btn');
+      const errorMessage = document.getElementById('error-message');
+      const errorText = document.getElementById('error-text');
 
       const exportBtn = document.getElementById('export-btn');
       const importInput = document.getElementById('import-input');
@@ -221,17 +229,20 @@
         const [hours, minutes] = time.split(':').map(Number);
         return hours * 60 + minutes;
       };
+      
       const minutesToHoursMinutes = (totalMinutes) => {
         if (totalMinutes < 0) totalMinutes = 0;
         const hours = Math.floor(totalMinutes / 60);
         const minutes = totalMinutes % 60;
         return `${hours}h ${minutes}m`;
       };
+      
       const todayLocalISO = () => {
         const d = new Date();
         d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
         return d.toISOString().split('T')[0];
       };
+      
       const mergeIntervals = (intervals) => {
         if (!intervals.length) return [];
         intervals.sort((a,b) => a[0]-b[0]);
@@ -244,6 +255,7 @@
         }
         return merged;
       };
+      
       const hasOverlap = (list, start, end, ignoreId=null) => {
         const s = timeToMinutes(start), e = timeToMinutes(end);
         return list.some(a => {
@@ -253,20 +265,98 @@
         });
       };
 
+      // ======= Funções de UI =======
+      function showError(message) {
+        errorText.textContent = message;
+        errorMessage.classList.remove('hidden');
+        setTimeout(() => {
+          errorMessage.classList.add('hidden');
+        }, 5000);
+      }
+
       function showMainApp() {
+        console.log('Mostrando aplicação principal');
         loginView.classList.add('hidden');
         welcomeView.classList.remove('hidden');
         mainContent.style.display = 'grid';
         currentUserSpan.textContent = currentUserEmail || appData.currentUser || '';
         datePicker.value = selectedDate;
+        loadActivitiesForSelectedDate();
       }
+      
       function showLogin() {
-        appData.currentUser = null; save();
+        console.log('Mostrando tela de login');
+        appData.currentUser = null; 
+        currentUserEmail = null;
+        save();
         loginView.classList.remove('hidden');
         welcomeView.classList.add('hidden');
         mainContent.style.display = 'none';
         if (emailInput) emailInput.value = '';
         currentUserSpan.textContent = '';
+        errorMessage.classList.add('hidden');
+      }
+
+      // ======= Função de atualização de sessão (CORRIGIDA) =======
+      async function updateSessionUI() {
+        console.log('Atualizando UI da sessão...');
+        try {
+          const { data: { user }, error } = await supabase.auth.getUser();
+          
+          if (error) {
+            console.error('Erro ao obter usuário:', error);
+            showLogin();
+            return;
+          }
+
+          if (user) {
+            console.log('Usuário autenticado:', user.email);
+            currentUserEmail = user.email;
+            appData.currentUser = user.id;
+            save();
+            showMainApp();
+          } else {
+            console.log('Nenhum usuário autenticado');
+            showLogin();
+          }
+        } catch (error) {
+          console.error('Erro na atualização da sessão:', error);
+          showLogin();
+        }
+      }
+
+      // ======= Carregamento de atividades =======
+      async function loadActivitiesForSelectedDate() {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data: activities, error } = await supabase
+            .from('activities')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('activity_date', selectedDate)
+            .order('start_time');
+
+          if (error) {
+            console.error('Erro ao carregar atividades:', error);
+            return;
+          }
+
+          // Atualizar dados locais
+          appData.users[user.id] = appData.users[user.id] || {};
+          appData.users[user.id][selectedDate] = activities.map(act => ({
+            id: act.id,
+            description: act.description,
+            startTime: act.start_time,
+            endTime: act.end_time
+          }));
+          
+          save();
+          render();
+        } catch (error) {
+          console.error('Erro ao carregar atividades:', error);
+        }
       }
 
       // ======= Render =======
@@ -337,177 +427,176 @@
         });
 
         // Soma do tempo ativo (união de intervalos)
-        const intervals = activities
-          .map(a => [timeToMinutes(a.startTime), timeToMinutes(a.endTime)])
-          .filter(([s,e]) => e > s);
+        const intervals = activities.map(a => [timeToMinutes(a.startTime), timeToMinutes(a.endTime)]);
         const merged = mergeIntervals(intervals);
-        const totalActiveMinutes = merged.reduce((acc,[s,e]) => acc + (e - s), 0);
-        const totalIdleMinutes = 1440 - totalActiveMinutes;
+        const totalActive = merged.reduce((sum, [s, e]) => sum + (e - s), 0);
+        const totalIdle = 1440 - totalActive;
 
-        activeTimeEl.textContent = minutesToHoursMinutes(totalActiveMinutes);
-        idleTimeEl.textContent = minutesToHoursMinutes(totalIdleMinutes);
-
-        save();
-      }
-
-      // ======= Supabase Auth =======
-      async function updateSessionUI() {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        if (error) console.warn('auth.getUser error:', error?.message);
-
-        if (user) {
-          currentUserEmail = user.email || user.user_metadata?.email || '(sem e-mail)';
-
-          // (opcional) garante profile; ignore erro se tabela não existir
-          try {
-            await supabase.from('profiles').upsert({ id: user.id, full_name: currentUserEmail }).select();
-          } catch (e) {
-            // ok ignorar se não houver tabela/permissão
-          }
-
-          appData.users = appData.users || {};
-          appData.currentUser = user.id;
-
-          if (!selectedDate) selectedDate = todayLocalISO();
-
-          showMainApp();
-          await loadActivitiesForSelectedDate();
-        } else {
-          showLogin();
-        }
-      }
-
-      // ======= CRUD Activities (Supabase) =======
-      async function loadActivitiesForSelectedDate() {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data, error } = await supabase
-          .from('activities')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('activity_date', selectedDate)
-          .order('start_time', { ascending: true });
-
-        appData.users = appData.users || {};
-        appData.users[user.id] = appData.users[user.id] || {};
-
-        if (error) {
-          console.error('loadActivities error:', error);
-          const cached = appData.users[user.id][selectedDate] || [];
-          appData.users[user.id][selectedDate] = cached;
-        } else {
-          appData.users[user.id][selectedDate] = (data || []).map(row => ({
-            id: row.id,
-            description: row.description,
-            startTime: row.start_time,
-            endTime: row.end_time
-          }));
-        }
-        save();
-        render();
-      }
-
-      // ======= Listeners =======
-      if (googleBtn) {
-          googleBtn?.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const { error } = await supabase.auth.signInWithOAuth({
-              provider: 'google',
-              options: {
-                // após autenticar, o Supabase volta para o seu site
-                redirectTo: window.location.origin + window.location.pathname
-              }
-            });
-            if (error) alert(error.message);
-          });
-      }
-
-      if (emailForm) {
-        emailForm.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const email = emailInput.value.trim();
-          if (!email) return;
-          const { error } = await supabase.auth.signInWithOtp({ email });
-          if (error) alert(error.message);
-          else otpInfo.classList.remove('hidden');
-        });
-      }
-
-      if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-          await supabase.auth.signOut();
-          showLogin();
-        });
-      }
-
-      if (datePicker) {
-        datePicker.addEventListener('change', async (e) => {
-          selectedDate = e.target.value || todayLocalISO();
-          resetForm();
-          await loadActivitiesForSelectedDate();
-        });
+        activeTimeEl.textContent = minutesToHoursMinutes(totalActive);
+        idleTimeEl.textContent = minutesToHoursMinutes(totalIdle);
       }
 
       function resetForm() {
-        form.reset();
         activityIdInput.value = '';
+        descriptionInput.value = '';
+        startTimeInput.value = '';
+        endTimeInput.value = '';
         cancelEditBtn.classList.add('hidden');
       }
 
+      // ======= Event Listeners =======
+      
+      // Login por email
+      emailForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        console.log('Tentando login por email...');
+        
+        const email = emailInput.value.trim();
+        if (!email) {
+          showError('Por favor, insira um email válido.');
+          return;
+        }
+
+        try {
+          const { error } = await supabase.auth.signInWithOtp({
+            email: email,
+            options: {
+              emailRedirectTo: window.location.origin
+            }
+          });
+
+          if (error) {
+            console.error('Erro no login por email:', error);
+            showError('Erro ao enviar email: ' + error.message);
+            return;
+          }
+
+          otpInfo.classList.remove('hidden');
+          emailInput.value = '';
+          console.log('Email de login enviado com sucesso');
+        } catch (error) {
+          console.error('Erro inesperado no login por email:', error);
+          showError('Erro inesperado. Tente novamente.');
+        }
+      });
+
+      // Login com Google
+      googleBtn.addEventListener('click', async () => {
+        console.log('Tentando login com Google...');
+        
+        try {
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: window.location.origin
+            }
+          });
+
+          if (error) {
+            console.error('Erro no login com Google:', error);
+            showError('Erro no login com Google: ' + error.message);
+          }
+        } catch (error) {
+          console.error('Erro inesperado no login com Google:', error);
+          showError('Erro inesperado. Tente novamente.');
+        }
+      });
+
+      // Logout
+      logoutBtn.addEventListener('click', async () => {
+        console.log('Fazendo logout...');
+        try {
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            console.error('Erro no logout:', error);
+          }
+          showLogin();
+        } catch (error) {
+          console.error('Erro inesperado no logout:', error);
+          showLogin();
+        }
+      });
+
+      // Mudança de data
+      datePicker.addEventListener('change', (e) => {
+        selectedDate = e.target.value;
+        loadActivitiesForSelectedDate();
+      });
+
+      // Formulário de atividades
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return alert('Faça login primeiro.');
+        if (!user) return;
 
-        const activities = appData.users[user.id]?.[selectedDate] || [];
-        const id = activityIdInput.value;
         const description = descriptionInput.value.trim();
         const startTime = startTimeInput.value;
         const endTime = endTimeInput.value;
+        const activityId = activityIdInput.value;
 
-        if (!description || !startTime || !endTime || timeToMinutes(startTime) >= timeToMinutes(endTime)) {
-          alert('Preencha os campos corretamente. O término deve ser após o início.');
+        if (!description || !startTime || !endTime) {
+          alert('Preencha todos os campos.');
           return;
         }
 
-        // valida sobreposição
-        if (hasOverlap(activities, startTime, endTime, id || null)) {
-          alert('Este intervalo conflita com outra atividade.');
+        if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
+          alert('Horário de início deve ser anterior ao término.');
           return;
         }
 
-        if (id) {
-          const { error } = await supabase
-            .from('activities')
-            .update({
-              description,
-              start_time: startTime,
-              end_time: endTime,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .eq('user_id', user.id);
-
-          if (error) return alert('Erro ao atualizar: ' + error.message);
-        } else {
-          const { error } = await supabase
-            .from('activities')
-            .insert({
-              user_id: user.id,
-              activity_date: selectedDate,
-              description,
-              start_time: startTime,
-              end_time: endTime
-            });
-
-          if (error) return alert('Erro ao salvar: ' + error.message);
+        const activities = appData.users[user.id]?.[selectedDate] || [];
+        if (hasOverlap(activities, startTime, endTime, activityId)) {
+          alert('Conflito de horário com outra atividade.');
+          return;
         }
 
-        resetForm();
-        await loadActivitiesForSelectedDate();
+        try {
+          if (activityId) {
+            // Editar
+            const { error } = await supabase
+              .from('activities')
+              .update({
+                description: description,
+                start_time: startTime,
+                end_time: endTime
+              })
+              .eq('id', activityId)
+              .eq('user_id', user.id);
+
+            if (error) {
+              console.error('Erro ao editar:', error);
+              alert('Erro ao editar: ' + error.message);
+              return;
+            }
+          } else {
+            // Criar
+            const { error } = await supabase
+              .from('activities')
+              .insert({
+                user_id: user.id,
+                activity_date: selectedDate,
+                description: description,
+                start_time: startTime,
+                end_time: endTime
+              });
+
+            if (error) {
+              console.error('Erro ao salvar:', error);
+              alert('Erro ao salvar: ' + error.message);
+              return;
+            }
+          }
+
+          resetForm();
+          await loadActivitiesForSelectedDate();
+        } catch (error) {
+          console.error('Erro inesperado:', error);
+          alert('Erro inesperado. Tente novamente.');
+        }
       });
 
+      // Editar/Excluir atividades
       activitiesList.addEventListener('click', async (e) => {
         const target = e.target.closest('button');
         if (!target) return;
@@ -532,14 +621,24 @@
 
         if (target.classList.contains('delete-btn')) {
           if (confirm('Tem certeza que deseja remover esta atividade?')) {
-            const { error } = await supabase
-              .from('activities')
-              .delete()
-              .eq('id', id)
-              .eq('user_id', user.id);
+            try {
+              const { error } = await supabase
+                .from('activities')
+                .delete()
+                .eq('id', id)
+                .eq('user_id', user.id);
 
-            if (error) return alert('Erro ao excluir: ' + error.message);
-            await loadActivitiesForSelectedDate();
+              if (error) {
+                console.error('Erro ao excluir:', error);
+                alert('Erro ao excluir: ' + error.message);
+                return;
+              }
+              
+              await loadActivitiesForSelectedDate();
+            } catch (error) {
+              console.error('Erro inesperado ao excluir:', error);
+              alert('Erro inesperado. Tente novamente.');
+            }
           }
         }
       });
@@ -593,14 +692,23 @@
         e.target.value = ''; // reset input
       });
 
+      // ======= Inicialização =======
+      console.log('Configurando listeners de autenticação...');
+      
       // Sessão inicial + reatividade
-      updateSessionUI();
-      supabase.auth.onAuthStateChange((_event, _session) => updateSessionUI());
+      await updateSessionUI();
+      
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('Mudança de estado de auth:', event, session?.user?.email);
+        await updateSessionUI();
+      });
 
       // PWA: registrar Service Worker
       if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("./service-worker.js");
+        navigator.serviceWorker.register("./service-worker.js").catch(console.error);
       }
+
+      console.log('Aplicação inicializada com sucesso!');
     });
   </script>
 </body>
