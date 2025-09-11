@@ -410,11 +410,17 @@
 
       // ======= Listeners =======
       if (googleBtn) {
-        googleBtn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
-          if (error) alert(error.message);
-        });
+          googleBtn?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const { error } = await supabase.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                // após autenticar, o Supabase volta para o seu site
+                redirectTo: window.location.origin + window.location.pathname
+              }
+            });
+            if (error) alert(error.message);
+          });
       }
 
       if (emailForm) {
@@ -599,3 +605,4 @@
   </script>
 </body>
 </html>
+
