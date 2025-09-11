@@ -53,6 +53,11 @@
             display: none;
         }
     </style>
+    <script>
+        const SUPABASE_URL = "https://unsjrvghzwkxyiveaypl.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuc2pydmdoendreHlpdmVheXBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1NDY4MjEsImV4cCI6MjA3MzEyMjgyMX0.erQdiaJWdQC4bG7KnKEwP8VwDVCh7ZKxoWHvxbk2zzU";
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    </script>
 </head>
 <body class="antialiased">
     <div class="container mx-auto p-4 md:p-8 max-w-5xl">
@@ -348,4 +353,5 @@
     </script>
 </body>
 </html>
+
 
